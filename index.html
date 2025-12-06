@@ -2,25 +2,32 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DOS Game Player</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>Запусти DOS-игру</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
       padding: 0;
       background: #000;
-      color: white;
-      font-family: Arial, sans-serif;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
       text-align: center;
+      padding: 20px;
     }
     #uploader {
       padding: 20px;
       max-width: 90%;
+      background: #111;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     }
     #dosbox {
       width: 100%;
@@ -28,35 +35,50 @@
       height: 70vh;
       border: 2px solid #333;
       display: none;
+      background: #000;
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 1.4em;
     }
     input[type="file"] {
-      margin-top: 10px;
-      padding: 8px;
-      width: 80%;
+      margin: 16px 0;
+      padding: 10px;
+      width: 100%;
+      font-size: 16px;
+      background: #333;
+      color: white;
+      border: 1px solid #555;
+      border-radius: 8px;
     }
     button {
-      margin-top: 10px;
-      padding: 10px 20px;
-      font-size: 16px;
+      padding: 12px 24px;
+      font-size: 18px;
       background: #4CAF50;
       color: white;
       border: none;
-      border-radius: 5px;
+      border-radius: 8px;
       cursor: pointer;
+      font-weight: bold;
     }
     button:disabled {
       background: #666;
       cursor: not-allowed;
     }
+    .note {
+      font-size: 0.9em;
+      color: #aaa;
+      margin-top: 12px;
+    }
   </style>
 </head>
 <body>
   <div id="uploader">
-    <h2>Загрузи ZIP с DOS-игрой</h2>
-    <p>Архив должен содержать .exe файл в корне (без папок внутри).</p>
+    <h2>Запусти DOS-игру в браузере</h2>
+    <p>Выбери ZIP-архив с игрой (без папок внутри!)</p>
     <input type="file" id="zipFile" accept=".zip" />
-    <br />
-    <button id="startBtn" disabled>Запустить игру</button>
+    <button id="startBtn" disabled>▶ Запустить</button>
+    <p class="note">Поддерживается Earthworm Jim, Doom, Prince of Persia и другие DOS-игры</p>
   </div>
   <div id="dosbox">Запуск...</div>
 
@@ -68,46 +90,41 @@
     const uploader = document.getElementById("uploader");
     const dosbox = document.getElementById("dosbox");
 
-    let selectedFile = null;
+    let gameFile = null;
 
     zipInput.addEventListener("change", (e) => {
-      selectedFile = e.target.files[0];
-      startBtn.disabled = !selectedIt;
-      if (selectedFile) {
-        startBtn.disabled = false;
-      }
+      gameFile = e.target.files[0];
+      startBtn.disabled = !gameFile;
     });
 
     startBtn.addEventListener("click", async () => {
-      if (!selectedFile) return;
+      if (!gameFile) return;
 
-      // Показываем эмулятор
       uploader.style.display = "none";
       dosbox.style.display = "block";
 
       try {
-        // Запускаем DOS
-        await Dos(dosbox).ready(async (fs) => {
-          // Загружаем файл в виртуальную ФС
-          const arrayBuf = await selectedFile.arrayBuffer();
-          await fs.upload("game.zip", new Uint8Array(arrayBuf));
+        const arrayBuffer = await gameFile.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
 
-          // Распаковываем
+        await Dos(dosbox).ready(async (fs) => {
+          // Загружаем ZIP в виртуальную файловую систему
+          await fs.upload("game.zip", uint8Array);
           await fs.extract("game.zip");
 
-          // Ищем .exe
+          // Ищем исполняемый файл
           const files = await fs.list("/");
-          const exeFile = files.find(f => f.toLowerCase().endsWith('.exe'));
+          const exe = files.find(f => f.toLowerCase().endsWith('.exe'));
 
-          if (!exeFile) {
-            throw new Error("Не найден .exe файл в архиве!");
+          if (!exe) {
+            throw new Error("В архиве не найден .exe файл!");
           }
 
-          // Запускаем игру (без звука — чтобы не висла)
-          await fs.run(exeFile, ["-nosound"]);
+          // Запускаем игру (без звука — для совместимости)
+          await fs.run(exe, ["-nosound"]);
         });
       } catch (err) {
-        dosbox.innerText = "❌ Ошибка:\n" + err.message;
+        dosbox.innerText = "❌ Ошибка:\n" + (err.message || err);
         console.error(err);
       }
     });
